@@ -2,26 +2,10 @@ import pygame
 import chess
 import chess.svg
 import torch
-import torch.nn as nn
 import io
 import cairosvg
 from PIL import Image
-
-
-class SimpleChessNet(nn.Module):
-    def __init__(self):
-        super().__init__()
-        self.model = nn.Sequential(
-            nn.Linear(773, 128),
-            nn.ReLU(),
-            nn.Linear(128, 1)
-        )
-
-    def forward(self, x):
-        return self.model(x)
-
-
-net = SimpleChessNet()
+from SimpleChessNet import SimpleChessNet
 
 
 def board_to_tensor(board, move):
@@ -72,11 +56,15 @@ def board_to_image(board, width):
     return pygame.image.fromstring(image.tobytes(), image.size, image.mode)
 
 
-def main():
+if __name__ == "__main__":
+    # Dwa niezależne modele (możesz je potem wczytać z różnych plików)
+    white_net = SimpleChessNet()
+    black_net = SimpleChessNet()
+
     WIDTH = 480
     pygame.init()
     screen = pygame.display.set_mode((WIDTH, WIDTH))
-    pygame.display.set_caption("Szachy AI vs AI")
+    pygame.display.set_caption("Szachy: AI vs AI (oddzielne sieci)")
     clock = pygame.time.Clock()
 
     board = chess.Board()
@@ -93,7 +81,11 @@ def main():
             pygame.time.wait(5000)
             break
 
-        move = choose_best_move(board, net)
+        if board.turn == chess.WHITE:
+            move = choose_best_move(board, white_net)
+        else:
+            move = choose_best_move(board, black_net)
+
         if move is None:
             print("Brak dostępnych ruchów.")
             break
@@ -107,7 +99,3 @@ def main():
         clock.tick(1)
 
     pygame.quit()
-
-
-if __name__ == "__main__":
-    main()
