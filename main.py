@@ -1,52 +1,12 @@
 import pygame
 import chess
 import chess.svg
-import torch
-import io
 import cairosvg
+import io
 from PIL import Image
-from SimpleChessNet import SimpleChessNet
-
-
-def board_to_tensor(board, move):
-    piece_map = board.piece_map()
-    tensor = torch.zeros(773)
-    piece_to_idx = {
-        'P': 0, 'N': 1, 'B': 2, 'R': 3, 'Q': 4, 'K': 5,
-        'p': 6, 'n': 7, 'b': 8, 'r': 9, 'q': 10, 'k': 11
-    }
-
-    for square, piece in piece_map.items():
-        idx = 64 * piece_to_idx[piece.symbol()] + square
-        tensor[idx] = 1.0
-
-    tensor[768] = move.from_square / 63.0
-    tensor[769] = move.to_square / 63.0
-    tensor[770] = 1.0 if move.promotion == chess.QUEEN else 0.0
-    tensor[771] = 1.0 if board.turn == chess.WHITE else 0.0
-    tensor[772] = board.fullmove_number / 100.0
-
-    return tensor
-
-
-def choose_best_move(board, model):
-    legal_moves = list(board.legal_moves)
-    best_score = float('-inf')
-    best_move = None
-
-    for move in legal_moves:
-        board.push(move)
-        tensor = board_to_tensor(board, move)
-        board.pop()
-
-        with torch.no_grad():
-            score = model(tensor.unsqueeze(0)).item()
-
-        if score > best_score:
-            best_score = score
-            best_move = move
-
-    return best_move
+import numpy as np
+from models.LinearSVM import LinearSVM, choose_best_move_svm
+from models.SimpleChessNet import SimpleChessNet, choose_best_move_net
 
 
 def board_to_image(board, width):
@@ -56,15 +16,23 @@ def board_to_image(board, width):
     return pygame.image.fromstring(image.tobytes(), image.size, image.mode)
 
 
+def train_dummy_svm():
+    X = np.random.uniform(-1, 1, (100, 3))
+    y = (X[:, 0] > 0).astype(int)
+
+    model = LinearSVM()
+    model.fit(X, y)
+    return model
+
+
 if __name__ == "__main__":
-    # Dwa niezależne modele (możesz je potem wczytać z różnych plików)
-    white_net = SimpleChessNet()
+    white_svm = train_dummy_svm()
     black_net = SimpleChessNet()
 
     WIDTH = 480
     pygame.init()
     screen = pygame.display.set_mode((WIDTH, WIDTH))
-    pygame.display.set_caption("Szachy: AI vs AI (oddzielne sieci)")
+    pygame.display.set_caption("SVM Szachy: AI vs AI")
     clock = pygame.time.Clock()
 
     board = chess.Board()
@@ -82,13 +50,14 @@ if __name__ == "__main__":
             break
 
         if board.turn == chess.WHITE:
-            move = choose_best_move(board, white_net)
+            move = choose_best_move_svm(board, white_svm)
         else:
-            move = choose_best_move(board, black_net)
+            move = choose_best_move_net(board, black_net)
 
         if move is None:
             print("Brak dostępnych ruchów.")
             break
+
         print(f"{'Białe' if board.turn == chess.WHITE else 'Czarne'} grają: {move}")
         board.push(move)
 
